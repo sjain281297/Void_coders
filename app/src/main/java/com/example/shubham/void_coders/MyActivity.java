@@ -1,0 +1,114 @@
+package com.example.shubham.void_coders;
+
+import android.Manifest;
+import android.app.Activity;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothManager;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.PersistableBundle;
+import android.os.RemoteException;
+import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.util.Log;
+
+import org.altbeacon.beacon.Beacon;
+import org.altbeacon.beacon.BeaconConsumer;
+import org.altbeacon.beacon.BeaconManager;
+import org.altbeacon.beacon.BeaconParser;
+import org.altbeacon.beacon.Identifier;
+import org.altbeacon.beacon.RangeNotifier;
+import org.altbeacon.beacon.Region;
+
+import java.util.Collection;
+
+import static org.altbeacon.beacon.service.BeaconService.TAG;
+
+
+public class MyActivity extends Activity implements BeaconConsumer, RangeNotifier {
+
+        private BeaconManager mBeaconManager;
+    private static final int PERMISSION_REQUEST_COARSE_LOCATION = 1;
+    private static String[] mPermissions = { Manifest.permission.ACCESS_FINE_LOCATION};
+    private static final String TAG = MyActivity.class.getSimpleName();
+
+    @Override
+    public void onCreate(Bundle savedInstanceState, PersistableBundle persistentState) {
+        super.onCreate(savedInstanceState, persistentState);
+        if (!havePermissions()) {
+            Log.i(TAG, "Requesting permissions needed for this app.");
+            requestPermissions();
+        }
+
+        if(!isBlueEnable()){
+            Intent bluetoothIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
+            startActivity(bluetoothIntent);
+        }
+
+        mBeaconManager = BeaconManager.getInstanceForApplication(this.getApplicationContext());
+        // Detect the main Eddystone-UID frame:
+        mBeaconManager.getBeaconParsers().add(new BeaconParser().
+                setBeaconLayout(BeaconParser.EDDYSTONE_UID_LAYOUT));
+
+        mBeaconManager.bind(this);
+    }
+
+
+
+        public void onBeaconServiceConnect() {
+            Region region = new Region("all-beacons-region", null, null, null);
+            try {
+                mBeaconManager.startRangingBeaconsInRegion(region);
+            } catch (RemoteException e) {
+                e.printStackTrace();
+            }
+            mBeaconManager.addRangeNotifier(this);
+        }
+
+        @Override
+        public void didRangeBeaconsInRegion(Collection<Beacon> beacons, Region region) {
+            for (Beacon beacon: beacons) {
+                    // This is a Eddystone-UID frame
+                    Identifier namespaceId = beacon.getId1();
+                    Identifier instanceId = beacon.getId2();
+                    Log.d(TAG, "I see a beacon transmitting namespace id: "+namespaceId+
+                            " and instance id: "+instanceId+
+                            " approximately "+beacon.getDistance()+" meters away.");
+
+
+            }
+        }
+
+        @Override
+        public void onPause() {
+            super.onPause();
+            mBeaconManager.unbind(this);
+        }
+
+    private boolean isBlueEnable() {
+        BluetoothManager bluetoothManager = (BluetoothManager) getSystemService(BLUETOOTH_SERVICE);
+        BluetoothAdapter bluetoothAdapter = null;
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.JELLY_BEAN_MR2) {
+            bluetoothAdapter = bluetoothManager.getAdapter();
+        }
+        return bluetoothAdapter.isEnabled();
+
+    }
+
+
+
+    private boolean havePermissions() {
+        for(String permission:mPermissions){
+            if(ActivityCompat.checkSelfPermission(this,permission)!= PackageManager.PERMISSION_GRANTED){
+                return  false;
+            }
+        }
+        return true;
+    }
+
+    private void requestPermissions() {
+        ActivityCompat.requestPermissions(this,
+                mPermissions, PERMISSION_REQUEST_COARSE_LOCATION);
+    }
+}
